@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+
+var https = require("https");
+var fs = require("fs");
+var http = require("http");
+var app = require("../app");
+var debug = require("debug")("confusionserver:server");
+
+// Get the port from the environment or use port 3000
+var port = normalizePort(process.env.PORT || "3000");
+app.set("port", port);
+
+// Create an HTTP server
+var server = http.createServer(app);
+
+// Listen on the specified port
+server.listen(port);
+server.on("error", onError);
+server.on("listening", onListening);
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    return val;
+  }
+
+  if (port >= 0) {
+    return port;
+  }
+
+  return false;
+}
+
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  var bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      // Port 3000 is already in use, try a different port
+      console.log(bind + " is already in use, trying a different port...");
+      port = normalizePort("3001");
+      app.set("port", port);
+      server.listen(port);
+      break;
+    default:
+      throw error;
+  }
+}
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+  debug("Listening on " + bind);
+
+  // Create HTTPS server with SSL/TLS
+  var options = {
+    key: fs.readFileSync(__dirname + "/private.key"),
+    cert: fs.readFileSync(__dirname + "/certificate.pem"),
+  };
+  var secureServer = https.createServer(options, app);
+  secureServer.listen(3443, "0.0.0.0", () => {
+    console.log("Secure server listening on port 3443");
+  });
+
+  secureServer.on("error", onError);
+  secureServer.on("listening", onListening);
+}

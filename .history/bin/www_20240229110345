@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+const https = require("https");
+const http = require("http");
+const fs = require("fs");
+const app = require("../app");
+const debug = require("debug")("confusionserver:server");
+
+/**
+ * Get ports from environment and store in Express.
+ */
+const port = normalizePort(process.env.PORT || "3000");
+const secPort = normalizePort(process.env.SECPORT || "3443");
+app.set("port", port);
+app.set("secPort", secPort);
+
+/**
+ * Create HTTP server.
+ */
+const server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+server.listen(port);
+server.on("error", onError);
+server.on("listening", onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+function normalizePort(val) {
+  const port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  const bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+function onListening() {
+  const addr = server.address();
+  const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+  debug("Listening on " + bind);
+
+  // Check if the secure port is configured
+  if (!secPort) {
+    console.error("Secure port is not configured.");
+    return;
+  }
+
+  // Check if the key and certificate files exist
+  const keyPath = __dirname + "/private.key";
+  const certPath = __dirname + "/certificate.pem";
+  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+    console.error("Key or certificate file not found.");
+    return;
+  }
+
+  // Create HTTPS server
+  const options = {
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath),
+  };
+  const secureServer = https.createServer(options, app);
+
+  // Listen on the secure port
+  secureServer.listen(secPort, () => {
+    console.log("Secure server listening on port ", secPort);
+  });
+  secureServer.on("error", onError);
+  secureServer.on("listening", onListening);
+}
